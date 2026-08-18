@@ -80,17 +80,16 @@ def cargar_datos():
         contornos = json.load(f)
     return sdf, geo, contornos
 
-def color_ln(pct_joven, max_pct=100):
-    """Gradiente naranja según % jóvenes en manzana."""
-    t = min(pct_joven / max_pct, 1.0)
-    if t >= 0.7:
-        return "#FF8200"
-    elif t >= 0.4:
-        return "#FFB366"
-    elif t >= 0.1:
-        return "#FFE4C4"
+def color_por_percentil(valor, p25, p50, p75):
+    """Coloriza por percentil interno — garantiza diferenciación visual en cualquier sección."""
+    if valor >= p75:
+        return "#CC5500"    # naranja oscuro — top 25%
+    elif valor >= p50:
+        return "#FF8200"    # naranja MC — 50-75%
+    elif valor >= p25:
+        return "#FFB366"    # naranja suave — 25-50%
     else:
-        return "#E2E8F0"
+        return "#FFE4C4"    # naranja pálido — bottom 25%
 
 def construir_mapa_manzanas(geo, contornos, seccion_sel):
     """Mapa de manzanas de la sección seleccionada, coloreadas por % LN joven."""
@@ -113,13 +112,17 @@ def construir_mapa_manzanas(geo, contornos, seccion_sel):
     m = folium.Map(location=[clat, clon], zoom_start=15,
                    tiles="CartoDB positron")
 
-    # Calcular max_pct para normalización
-    pcts = []
-    for feat in feats_sec:
-        p = feat["properties"]
-        if p["LN_estimada"] > 0:
-            pcts.append(p["LN_1839_est"] / p["LN_estimada"] * 100)
-    max_pct = max(pcts) if pcts else 100
+    # Calcular percentiles de LN 18-39 entre manzanas con datos
+    valores_j = [f["properties"]["LN_1839_est"]
+                 for f in feats_sec if f["properties"]["LN_estimada"] > 0]
+    if len(valores_j) >= 4:
+        valores_j_sorted = sorted(valores_j)
+        n = len(valores_j_sorted)
+        p25 = valores_j_sorted[n // 4]
+        p50 = valores_j_sorted[n // 2]
+        p75 = valores_j_sorted[3 * n // 4]
+    else:
+        p25, p50, p75 = 1, 2, 3
 
     for feat in feats_sec:
         p   = feat["properties"]
@@ -131,8 +134,8 @@ def construir_mapa_manzanas(geo, contornos, seccion_sel):
         prior50 = p["prioridad_50"]
 
         pct_j = (ln_j / ln_est * 100) if ln_est > 0 else 0
-        col   = color_ln(pct_j, max_pct)
-        opac  = 0.75 if ln_est > 0 else 0.15
+        col   = color_por_percentil(ln_j, p25, p50, p75) if ln_est > 0 else "#E2E8F0"
+        opac  = 0.80 if ln_est > 0 else 0.12
 
         tooltip_html = f"""
         <b>Manzana {mza} · §{seccion_sel}</b><br>
@@ -273,17 +276,24 @@ def main():
                     unsafe_allow_html=True)
         st.markdown("""
         <div class="legend-box">
+            <div style="font-size:0.75rem; color:#64748b; margin-bottom:8px;">
+                Concentración relativa dentro de la sección
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:#CC5500;"></div>
+                <span><b>Muy alta</b> — top 25%</span>
+            </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background:#FF8200;"></div>
-                <span><b>Alta</b> — &gt;70% LN joven</span>
+                <span><b>Alta</b> — 50–75%</span>
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background:#FFB366;"></div>
-                <span><b>Media</b> — 40–70%</span>
+                <span><b>Media</b> — 25–50%</span>
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background:#FFE4C4;"></div>
-                <span><b>Baja</b> — 10–40%</span>
+                <span><b>Baja</b> — bottom 25%</span>
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background:#E2E8F0;"></div>
