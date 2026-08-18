@@ -149,3 +149,11 @@ print(f"   {len(rows)} secciones · ITerMC calculado")
 for s in sorted(rows, key=lambda x: rows[x]["itermc"], reverse=True):
     r = rows[s]
     print(f"   §{s}: ITerMC={r['itermc']:5.1f} · {r['clasificacion']}")
+
+# ── Punto de entrada para importación ─────────────────────────────────────────
+def generar_si_necesario():
+    """Genera secciones_itermc.csv si no existe. Se llama al arrancar la app."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "secciones_itermc.csv")
+    if not os.path.exists(ruta):
+        import runpy
+        runpy.run_path(__file__)

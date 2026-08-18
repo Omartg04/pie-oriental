@@ -15,6 +15,7 @@ DATA = os.path.join(BASE, "data")
 sys.path.insert(0, BASE)
 from DEMO_CONFIG import *
 from auth import require_auth
+import generar_datos
 
 CSS = f"""
 <style>
@@ -67,6 +68,7 @@ html, body, [class*="css"] {{ font-family: 'DM Sans', sans-serif; }}
 
 @st.cache_data(ttl=300)
 def cargar_datos():
+    generar_datos.generar_si_necesario()
     sdf = pd.read_csv(os.path.join(DATA, "secciones_itermc.csv"))
     with open(os.path.join(DATA, "PIE_Oriental_manzanas.geojson")) as f:
         geo = json.load(f)
