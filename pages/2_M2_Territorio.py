@@ -9,6 +9,7 @@ import folium
 from streamlit_folium import st_folium
 import plotly.graph_objects as go
 import json, os, sys
+from shapely.geometry import shape, Point
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(BASE, "data")
@@ -292,14 +293,100 @@ def main():
         """, unsafe_allow_html=True)
 
     with col_mapa:
-        st.markdown(f'<div class="section-title">🏘️ Manzanas · §{seccion_sel}</div>',
+        st.markdown(f'<div class="section-title">🏘️ Manzanas · §{seccion_sel} — haz clic en una manzana</div>',
                     unsafe_allow_html=True)
         with st.spinner("Cargando manzanas…"):
             m = construir_mapa_manzanas(geo, contornos, seccion_sel)
             if m:
-                st_folium(m, width="100%", height=500, returned_objects=[])
+                mapa_data = st_folium(
+                    m, width="100%", height=500,
+                    returned_objects=["last_clicked"],
+                    key=f"mapa_m2_{seccion_sel}",
+                )
             else:
+                mapa_data = None
                 st.warning("No hay geometría disponible para esta sección.")
+
+    # ── Detectar manzana clickeada via point-in-polygon ───────────────────────
+    mza_sel = None
+    if mapa_data and mapa_data.get("last_clicked"):
+        lc = mapa_data["last_clicked"]
+        click_pt = Point(lc["lng"], lc["lat"])
+        for feat in feats_sec:
+            try:
+                if shape(feat["geometry"]).contains(click_pt):
+                    p = feat["properties"]
+                    if p["LN_estimada"] > 0:
+                        mza_sel = p
+                    break
+            except Exception:
+                continue
+
+    # ── Card de manzana seleccionada ──────────────────────────────────────────
+    if mza_sel:
+        p      = mza_sel
+        ln_est = p["LN_estimada"]
+        ln_j   = p["LN_1839_est"]
+        ln_h   = p["LN_H_est"]
+        ln_m   = p["LN_M_est"]
+        pct_j  = round(ln_j / ln_est * 100, 1) if ln_est else 0
+        pct_h  = round(ln_h / ln_j * 100, 1) if ln_j else 0
+        pct_m  = round(ln_m / ln_j * 100, 1) if ln_j else 0
+        prior  = "⭐ Prioridad top 50%" if p.get("prioridad_50") else ""
+
+        c_mza1, c_mza2, c_mza3, c_mza4 = st.columns(4, gap="medium")
+        with c_mza1:
+            st.markdown(f"""
+            <div style="background:#FF8200; border-radius:12px; padding:16px 18px; color:#fff;">
+                <div style="font-size:0.72rem; font-weight:700; opacity:0.75;
+                            text-transform:uppercase; letter-spacing:0.1em; margin-bottom:4px;">
+                    Manzana seleccionada {prior}
+                </div>
+                <div style="font-size:2.0rem; font-weight:700; line-height:1.1;">
+                    {p['MZA']}
+                </div>
+                <div style="font-size:0.78rem; opacity:0.80; margin-top:4px;">
+                    §{seccion_sel}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_mza2:
+            st.markdown(f"""
+            <div style="background:#fff; border:1px solid #E2E8F0; border-radius:12px;
+                        padding:16px 18px; border-top:4px solid #FF8200;">
+                <div style="font-size:0.72rem; font-weight:700; color:#64748b;
+                            text-transform:uppercase; margin-bottom:4px;">LN Total estimada</div>
+                <div style="font-size:1.8rem; font-weight:700; color:#1e293b;">{ln_est}</div>
+                <div style="font-size:0.75rem; color:#94a3b8;">electores registrados</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_mza3:
+            st.markdown(f"""
+            <div style="background:#fff; border:1px solid #E2E8F0; border-radius:12px;
+                        padding:16px 18px; border-top:4px solid #FF8200;">
+                <div style="font-size:0.72rem; font-weight:700; color:#64748b;
+                            text-transform:uppercase; margin-bottom:4px;">LN 18–39 años</div>
+                <div style="font-size:1.8rem; font-weight:700; color:#FF8200;">{ln_j}</div>
+                <div style="font-size:0.75rem; color:#94a3b8;">{pct_j}% del total de la manzana</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_mza4:
+            st.markdown(f"""
+            <div style="background:#fff; border:1px solid #E2E8F0; border-radius:12px;
+                        padding:16px 18px; border-top:4px solid #FFB366;">
+                <div style="font-size:0.72rem; font-weight:700; color:#64748b;
+                            text-transform:uppercase; margin-bottom:4px;">Desglose por sexo</div>
+                <div style="font-size:1.0rem; font-weight:700; color:#1e293b; margin-bottom:2px;">
+                    👨 {ln_h} hombres
+                    <span style="font-size:0.75rem; color:#94a3b8;">({pct_h}%)</span>
+                </div>
+                <div style="font-size:1.0rem; font-weight:700; color:#1e293b;">
+                    👩 {ln_m} mujeres
+                    <span style="font-size:0.75rem; color:#94a3b8;">({pct_m}%)</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
 
     # ── Insight box ───────────────────────────────────────────────────────────
     if seccion_sel == 876:
@@ -342,6 +429,7 @@ def main():
         """, unsafe_allow_html=True)
 
     # ── Top manzanas por LN joven ─────────────────────────────────────────────
+    mza_sel_num = mza_sel["MZA"] if mza_sel else None
     st.markdown(f'<div class="section-title">📋 Top manzanas por concentración joven · §{seccion_sel}</div>',
                 unsafe_allow_html=True)
 
@@ -366,15 +454,23 @@ def main():
                .head(20)
                .reset_index(drop=True))
 
-    # Gráfico horizontal top 15
+    # Gráfico horizontal top 15 — resalta manzana clickeada
     top15 = mzas_df.head(15)
+    bar_colors = []
+    for _, r in top15.iterrows():
+        if mza_sel_num and r["Manzana"] == mza_sel_num:
+            bar_colors.append("#333F48")
+        elif r["Prior50"] == "⭐":
+            bar_colors.append("#FF8200")
+        else:
+            bar_colors.append("#FFB366")
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
         y=[f"Mzna {r['Manzana']}" for _, r in top15.iterrows()],
         x=top15["LN 18–39"],
         orientation="h",
-        marker_color=["#FF8200" if r["Prior50"] == "⭐" else "#FFB366"
-                      for _, r in top15.iterrows()],
+        marker_color=bar_colors,
         marker_line_color="#ffffff", marker_line_width=1,
         text=top15["LN 18–39"], textposition="outside",
         textfont=dict(size=11, color="#333F48"),
@@ -396,6 +492,17 @@ def main():
             use_container_width=True,
             hide_index=True,
         )
+
+    # ── Navegación ────────────────────────────────────────────────────────────
+    st.markdown("<div class='nav-row'>", unsafe_allow_html=True)
+    nav1, nav_mid, nav2 = st.columns([1, 4, 1])
+    with nav1:
+        if st.button("← Panorama", use_container_width=True):
+            st.switch_page("pages/1_M1_Panorama.py")
+    with nav2:
+        if st.button("Comités →", type="primary", use_container_width=True):
+            st.switch_page("pages/3_M3_Comites.py")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Footer ────────────────────────────────────────────────────────────────
     st.markdown(f'<div class="footer">{FOOTER_TEXTO}</div>', unsafe_allow_html=True)

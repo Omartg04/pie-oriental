@@ -335,6 +335,17 @@ def main():
     )
     st.plotly_chart(fig, use_container_width=True)
 
+    # ── Navegación ────────────────────────────────────────────────────────────
+    st.markdown("<div class='nav-row'>", unsafe_allow_html=True)
+    nav1, nav_mid, nav2 = st.columns([1, 4, 1])
+    with nav1:
+        if st.button("← Inicio", use_container_width=True):
+            st.switch_page("Home.py")
+    with nav2:
+        if st.button("Territorios →", type="primary", use_container_width=True):
+            st.switch_page("pages/2_M2_Territorio.py")
+    st.markdown("</div>", unsafe_allow_html=True)
+
     # ── Footer ────────────────────────────────────────────────────────────────
     st.markdown(f'<div class="footer">{FOOTER_TEXTO}</div>', unsafe_allow_html=True)
 
